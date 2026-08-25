@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// User — single-user app for v1, but modelled properly so it never blocks you.
+// ---------------------------------------------------------------------------
+model User {
+  id           String @id @default(cuid())
+  email        String @unique
+  passwordHash String
+
+  // Day boundary. dayStartHour=4 means 1:40am still counts as "yesterday".
+  timezone     String @default("America/Los_Angeles")
+  dayStartHour Int    @default(4)
+
+  // Non-negotiables count this many times a normal habit in the daily %.
+  nonNegotiableWeight Int @default(2)
+
+  habits    Habit[]
+  entries   Entry[]
+  days      Day[]
+  todos     Todo[]
+  weekGoals WeekGoal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum HabitCategory {
+  NON_NEGOTIABLE
+  OTHER
+}
+
+enum HabitType {
+  BINARY // did it / didn't
+  QUANTITY // 3 litres, 20 pages, 10 minutes
+}
+
+enum ResolveWindow {
+  SAME_DAY // checkable during the day itself
+  NEXT_MORNING // "sleep by 10:30pm" / "wake before 6am" — only knowable after
+}
+
+model Habit {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name     String
+  category HabitCategory @default(NON_NEGOTIABLE)
+  type     HabitType     @default(BINARY)
+
+  // QUANTITY only. Completion is `value >= target`; partial credit below that.
+  target Decimal? @db.Decimal(10, 2)
+  unit   String? // "L", "pages", "min", "steps"
+
+  // Which weekdays this habit is scheduled. 0 = Sunday … 6 = Saturday.
+  // Unscheduled days render as "—" and are excluded from the denominator,
+  // so a rest day never counts as a miss.
+  scheduleDays Int[] @default([0, 1, 2, 3, 4, 5, 6])
+
+  resolveWindow ResolveWindow @default(SAME_DAY)
+  sortOrder     Int           @default(0)
+
+  // History integrity: a habit added on the 15th shows dashes on days 1–14,
+  // never retroactive misses.
+  activeFrom DateTime  @db.Date
+  activeTo   DateTime? @db.Date
+  archivedAt DateTime?
+
+  entries Entry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, archivedAt])
+}
+
+enum MissReason {
+  TIRED
+  NO_TIME
+  TRAVELING
+  SICK
+  SOCIAL
+  FORGOT
+  CHOSE_NOT_TO
+}
+
+model Entry {
+  id      String @id @default(cuid())
+  habitId String
+  habit   Habit  @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date DateTime @db.Date
+
+  // Numeric, never boolean. BINARY stores 1 or 0; QUANTITY stores the amount.
+  // This is what makes partial credit and future auto-logging possible.
+  value  Decimal @db.Decimal(10, 2)
+  source String  @default("manual")
+
+  // Logged more than a day late — surfaced with a dot so history stays honest.
+  isBackfill Boolean @default(false)
+
+  // The behavioural signal. Only meaningful on misses.
+  missReason MissReason?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([habitId, date])
+  @@index([userId, date])
+}
+
+model Day {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date DateTime @db.Date
+
+  // Morning
+  intention String?
+
+  // Evening
+  energy Int? // 1–5
+  mood   Int? // 1–5
+
+  // Structured reflection — these are what make later analysis possible.
+  whatWorked       String?
+  whatBlocked      String?
+  tomorrowOneThing String?
+  notes            String?
+
+  // Cached weighted daily %. Disposable — always recomputable from entries.
+  progressPct Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model Todo {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date DateTime @db.Date
+  text String
+  done Boolean  @default(false)
+
+  // Rolled over from an unfinished previous day. 3+ is a signal, not a failure.
+  rollCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+}
+
+model WeekGoal {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  weekStart DateTime @db.Date // Monday
+
+  // The commitment: "push 51.2% -> 55%".
+  targetPct   Decimal @db.Decimal(5, 2)
+  baselinePct Decimal @db.Decimal(5, 2) // trailing 4-week average when set
+
+  // Count form: "tick 9 of 11". Counts beat percentages in the UI.
+  targetChecks Int
+  totalChecks  Int
+
+  // Deliberately lowering a target during a hard week is first-class,
+  // not a hidden failure. Systems without a deload break their users.
+  rebaselinedAt  DateTime?
+  rebaselinedFrom Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, weekStart])
+}

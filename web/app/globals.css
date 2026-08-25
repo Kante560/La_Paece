@@ -1,0 +1,247 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Paper-inspired, digitally clean.
+ * Handwriting is seasoning — headers and section labels only. Everything you
+ * have to read or tap is Inter, because legibility beats atmosphere at 6am.
+ */
+:root {
+  --paper: #faf7f0;
+  --paper-edge: #f1ebde;
+  --ink: #1c1c1c;
+  --ink-soft: #5a5449;
+  --ink-faint: #918977;
+  --rule: #ded7c7;
+  --accent: #c4463a;
+  --accent-soft: #ecd3ce;
+  --good: #4a7c59;
+  --shadow: rgba(60, 50, 30, 0.09);
+}
+
+/*
+ * "Night paper", not an inverted page. You log at 10:30pm in a dark room —
+ * a full-brightness cream screen there is hostile.
+ */
+[data-theme="night"] {
+  --paper: #17150f;
+  --paper-edge: #1f1c15;
+  --ink: #ece5d6;
+  --ink-soft: #a9a091;
+  --ink-faint: #6d6558;
+  --rule: #322d24;
+  --accent: #dd6b58;
+  --accent-soft: #402420;
+  --good: #7fae8c;
+  --shadow: rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="day"]) {
+    --paper: #17150f;
+    --paper-edge: #1f1c15;
+    --ink: #ece5d6;
+    --ink-soft: #a9a091;
+    --ink-faint: #6d6558;
+    --rule: #322d24;
+    --accent: #dd6b58;
+    --accent-soft: #402420;
+    --good: #7fae8c;
+    --shadow: rgba(0, 0, 0, 0.35);
+  }
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  /* Ruled paper, drawn in CSS. An image texture would cost real milliseconds
+     on every scroll for the same effect. */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    var(--rule) 31px,
+    var(--rule) 32px
+  );
+  background-attachment: fixed;
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-rule bg-paper-edge;
+    box-shadow: 0 1px 2px var(--shadow);
+  }
+
+  .label-hand {
+    font-family: var(--font-hand), cursive;
+    @apply text-ink-soft;
+    letter-spacing: 0.01em;
+  }
+
+  /* Underlined section headers, like the reference page. */
+  .section-title {
+    font-family: var(--font-hand), cursive;
+    @apply relative inline-block text-xl text-ink;
+  }
+  .section-title::after {
+    content: "";
+    @apply absolute -bottom-0.5 left-0 right-0 h-px bg-ink-faint;
+  }
+
+  .field {
+    @apply w-full resize-none bg-transparent text-[15px] leading-8 text-ink outline-none;
+    @apply placeholder:text-ink-faint;
+  }
+}
+
+/* The one moment of delight: the check draws itself on. */
+@keyframes draw-check {
+  from {
+    stroke-dashoffset: 30;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.check-path {
+  stroke-dasharray: 30;
+  animation: draw-check 220ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fade-up {
+  animation: fade-up 220ms ease-out both;
+}
+
+/* ---------------------------------------------------------------------------
+ * Loader — a lifter doing curls. See components/loader.tsx.
+ * The forearm and its dumbbell rotate as one group at the elbow; the body
+ * braces very slightly against the load so it doesn't read as a stiff decal.
+ * ------------------------------------------------------------------------- */
+.lift-fore {
+  transform-box: view-box;
+}
+.lift-fore-l {
+  transform-origin: 22px 45px;
+  animation: curl-l 1400ms cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+.lift-fore-r {
+  transform-origin: 58px 45px;
+  animation: curl-r 1400ms cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+.lift-body {
+  transform-box: view-box;
+  transform-origin: 40px 74px;
+  animation: brace 1400ms cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+.lift-shadow {
+  transform-box: view-box;
+  transform-origin: 40px 77px;
+  animation: shade 1400ms cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+.lift-label {
+  animation: breathe 1400ms ease-in-out infinite;
+}
+
+@keyframes curl-l {
+  0%, 10% { transform: rotate(0); }
+  48%, 58% { transform: rotate(139deg); }
+  94%, 100% { transform: rotate(0); }
+}
+@keyframes curl-r {
+  0%, 10% { transform: rotate(0); }
+  48%, 58% { transform: rotate(-139deg); }
+  94%, 100% { transform: rotate(0); }
+}
+@keyframes brace {
+  0%, 10%, 94%, 100% { transform: translateY(0) scaleY(1); }
+  48%, 58% { transform: translateY(-1.5px) scaleY(0.985); }
+}
+@keyframes shade {
+  0%, 10%, 94%, 100% { transform: scaleX(1); opacity: 0.5; }
+  48%, 58% { transform: scaleX(0.88); opacity: 0.32; }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------------
+ * The sign-off. It's the last thing you see after closing out the day, so it
+ * gets a hand-drawn swash rather than the flat 1px rule the sections use.
+ * ------------------------------------------------------------------------- */
+.signoff {
+  font-family: var(--font-hand), cursive;
+  @apply relative inline-block text-ink-soft;
+}
+.signoff-swash {
+  @apply pointer-events-none absolute left-1/2 top-full w-[125%] -translate-x-1/2;
+  color: var(--accent);
+}
+.signoff-swash path {
+  stroke-dasharray: 210;
+  stroke-dashoffset: 210;
+  animation: swash 900ms 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes swash {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Long-press / right-press feedback on a habit check. */
+.press-hold {
+  animation: press-hold 480ms ease-out forwards;
+}
+@keyframes press-hold {
+  from { transform: scale(1); }
+  to { transform: scale(0.9); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-path,
+  .fade-up,
+  .lift-fore-l,
+  .lift-fore-r,
+  .lift-body,
+  .lift-shadow,
+  .lift-label,
+  .press-hold {
+    animation: none;
+  }
+  .check-path {
+    stroke-dashoffset: 0;
+  }
+  /* Freeze the lifter mid-rep so it still reads as "working", not broken. */
+  .lift-fore-l {
+    transform: rotate(70deg);
+  }
+  .lift-fore-r {
+    transform: rotate(-70deg);
+  }
+  .signoff-swash path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
