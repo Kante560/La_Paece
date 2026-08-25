@@ -7,3 +7,4 @@ build/
 *.tsbuildinfo
 .DS_Store
 npm-debug.log*
+.env.example
