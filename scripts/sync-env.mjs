@@ -14,9 +14,21 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(root, ".env");
 
+/*
+ * On a host there is no .env file — Railway and Vercel inject the variables
+ * straight into process.env — and there never will be, because .env is
+ * gitignored. Exiting non-zero here failed the build before a single file was
+ * compiled. Locally the file is the source of truth and its absence is a real
+ * mistake, so say so; either way this script has nothing left to copy.
+ */
 if (!existsSync(source)) {
-  console.error("[env] No .env at the repo root. Copy .env.example to .env first.");
-  process.exit(1);
+  const hosted = process.env.CI || process.env.RAILWAY_ENVIRONMENT || process.env.VERCEL;
+  console.log(
+    hosted
+      ? "[env] No root .env — using the environment variables from the host."
+      : "[env] No .env at the repo root. Create one before running locally.",
+  );
+  process.exit(0);
 }
 
 for (const target of [path.join(root, "api", ".env"), path.join(root, "web", ".env.local")]) {

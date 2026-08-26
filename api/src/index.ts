@@ -19,6 +19,13 @@ const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:3000";
 
+/*
+ * Railway terminates TLS at its edge and forwards over plain http, so without
+ * this Express sees every request as insecure and req.ip is the proxy's address
+ * rather than the caller's.
+ */
+app.set("trust proxy", 1);
+
 app.use(cors({ origin: WEB_ORIGIN.split(",").map((s) => s.trim()), credentials: true }));
 app.use(express.json({ limit: "256kb" }));
 app.use(cookieParser());

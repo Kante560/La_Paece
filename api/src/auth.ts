@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from "express";
+import type { CookieOptions, NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { prisma } from "./db.js";
 
@@ -24,19 +24,39 @@ declare global {
   }
 }
 
+/*
+ * In production the web app and this API sit on different domains (Vercel and
+ * Railway), which makes every API call a cross-site request. A SameSite=Lax
+ * cookie is simply not sent on those: the browser accepts it at login and then
+ * withholds it on everything after, so the very next call 401s and the client
+ * bounces you back to /login. It reads as "logging in logs me out". None is the
+ * only value that survives the trip, and browsers only honour None together
+ * with Secure — hence the pair moving as one.
+ *
+ * Locally both sides are localhost, so Lax is correct and Secure would break
+ * plain http. env.ts warns if NODE_ENV leaves this on the wrong branch.
+ */
+const CROSS_SITE = process.env.NODE_ENV === "production";
+
+/*
+ * Shared by issue and clear on purpose. A cookie is only cleared when the
+ * attributes match the ones it was set with, so a clearCookie that forgets
+ * sameSite/secure silently leaves the session in place and logout does nothing.
+ */
+const cookieOptions: CookieOptions = {
+  httpOnly: true,
+  sameSite: CROSS_SITE ? "none" : "lax",
+  secure: CROSS_SITE,
+  path: "/",
+};
+
 export function issueSession(res: Response, userId: string): void {
   const token = jwt.sign({ sub: userId }, SECRET, { expiresIn: "30d" });
-  res.cookie(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: THIRTY_DAYS,
-    path: "/",
-  });
+  res.cookie(COOKIE, token, { ...cookieOptions, maxAge: THIRTY_DAYS });
 }
 
 export function clearSession(res: Response): void {
-  res.clearCookie(COOKIE, { path: "/" });
+  res.clearCookie(COOKIE, cookieOptions);
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
