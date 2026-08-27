@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import Portal from "./Portal";
 
 export interface MenuAction {
@@ -26,24 +26,43 @@ const MARGIN = 8;
  * menu you have to scroll to reach.
  */
 export default function ActionMenu({ at, title, actions, onClose }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
+  /*
+   * A state-backed callback ref, not useRef.
+   *
+   * Portal gates its children behind a mounted flag so it never touches
+   * `document` during SSR, which means the menu's own node does not exist on
+   * the render where `at` first becomes non-null. A useRef + `[at]` effect
+   * therefore measured `null`, bailed out, and never ran again once the node
+   * did appear — leaving the menu pinned at its initial 0,0 in the top-left
+   * corner. Keying the measurement on the node itself makes it run the moment
+   * the element attaches, whenever that turns out to be.
+   */
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  /*
+   * Depend on the coordinates, not the `at` object. Callers build it inline, so
+   * its identity changes on every parent render and an `[at]` dependency would
+   * re-measure on renders where nothing actually moved.
+   */
+  const ax = at?.x ?? null;
+  const ay = at?.y ?? null;
 
   useLayoutEffect(() => {
-    if (!at || !ref.current) return;
-    const { width, height } = ref.current.getBoundingClientRect();
+    if (ax === null || ay === null || !el) return;
+    const { width, height } = el.getBoundingClientRect();
     setPos({
-      x: Math.min(Math.max(MARGIN, at.x), window.innerWidth - width - MARGIN),
-      y: Math.min(Math.max(MARGIN, at.y), window.innerHeight - height - MARGIN),
+      x: Math.min(Math.max(MARGIN, ax), window.innerWidth - width - MARGIN),
+      y: Math.min(Math.max(MARGIN, ay), window.innerHeight - height - MARGIN),
     });
-  }, [at]);
+  }, [ax, ay, el]);
 
   useEffect(() => {
     if (!at) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     // `true` so it fires before the row's own handlers.
     const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (el && !el.contains(e.target as Node)) onClose();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onDown, true);
@@ -51,7 +70,7 @@ export default function ActionMenu({ at, title, actions, onClose }: Props) {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onDown, true);
     };
-  }, [at, onClose]);
+  }, [at, el, onClose]);
 
   if (!at) return null;
 
@@ -59,11 +78,17 @@ export default function ActionMenu({ at, title, actions, onClose }: Props) {
     <Portal>
       <div className="fixed inset-0 z-40" aria-hidden="true" />
       <div
-        ref={ref}
+        ref={setEl}
         role="menu"
         aria-label={title}
         className="card fade-up fixed z-50 min-w-[168px] overflow-hidden py-1"
-        style={{ left: pos.x, top: pos.y, boxShadow: "0 8px 24px var(--shadow)" }}
+        style={{
+          left: pos?.x ?? at.x,
+          top: pos?.y ?? at.y,
+          // Laid out but not painted until measured, so the clamp never shows its work.
+          visibility: pos ? "visible" : "hidden",
+          boxShadow: "0 8px 24px var(--shadow)",
+        }}
       >
         {title && (
           <p className="truncate border-b border-rule px-3 pb-1.5 pt-1 text-[11px] uppercase tracking-wide text-ink-faint">

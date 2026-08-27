@@ -4,6 +4,22 @@ import { useCallback, useRef } from "react";
 
 const HOLD_MS = 480;
 const SLOP_PX = 10;
+/** Breathing room between the control and the menu's edge. */
+const GAP_PX = 6;
+
+/**
+ * Anchor beside the control that was pressed, not at the raw pointer point.
+ *
+ * On touch the fingertip is the one place the menu must not open — it's covered
+ * by the hand that opened it, and a 480ms hold drifts a few pixels anyway, so
+ * pointer coordinates put the menu in a slightly different spot every time.
+ * Measuring the control instead lands it in the same place on every press, and
+ * ActionMenu's clamp pulls it back inside the viewport near an edge.
+ */
+function anchorOf(el: HTMLElement): { x: number; y: number } {
+  const r = el.getBoundingClientRect();
+  return { x: r.right + GAP_PX, y: r.top };
+}
 
 /**
  * Long-press on touch, right-click on desktop — both open the same menu.
@@ -13,8 +29,8 @@ const SLOP_PX = 10;
  * outweigh the thing it manages. Hiding edit/delete behind a press keeps the
  * list a list, and both gestures are the platform-native "more options" idiom.
  *
- * Returns handlers to spread onto the trigger. `onTrigger` receives the screen
- * point to anchor the menu at.
+ * Returns handlers to spread onto the trigger. `onTrigger` receives the viewport
+ * point to anchor the menu at — just off the control's top-right corner.
  */
 export function useLongPress(onTrigger: (x: number, y: number) => void) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -36,10 +52,13 @@ export function useLongPress(onTrigger: (x: number, y: number) => void) {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       fired.current = false;
       origin.current = { x: e.clientX, y: e.clientY };
-      const { clientX, clientY } = e;
+      // Read the element now: React clears currentTarget once the handler returns,
+      // and this is used a good half-second later.
+      const target = e.currentTarget as HTMLElement;
       timer.current = setTimeout(() => {
         fired.current = true;
-        onTrigger(clientX, clientY);
+        const { x, y } = anchorOf(target);
+        onTrigger(x, y);
       }, HOLD_MS);
     },
     [onTrigger],
@@ -61,7 +80,8 @@ export function useLongPress(onTrigger: (x: number, y: number) => void) {
       e.preventDefault();
       clear();
       fired.current = true;
-      onTrigger(e.clientX, e.clientY);
+      const { x, y } = anchorOf(e.currentTarget as HTMLElement);
+      onTrigger(x, y);
     },
     [clear, onTrigger],
   );
