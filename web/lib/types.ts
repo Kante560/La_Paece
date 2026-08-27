@@ -56,6 +56,14 @@ export interface DayProgress {
   cells: Cell[];
 }
 
+export interface Consistency {
+  /** 0..100, or null until there is a completed day to rate. */
+  ovr: number | null;
+  daysCounted: number;
+  delta: number | null;
+  windowDays: number;
+}
+
 export interface Streak {
   habitId: string;
   current: number;
@@ -78,6 +86,7 @@ export interface DayView {
   today: string;
   habits: Habit[];
   progress: DayProgress;
+  consistency: Consistency;
   streaks: Record<string, Streak>;
   day: {
     intention: string | null;

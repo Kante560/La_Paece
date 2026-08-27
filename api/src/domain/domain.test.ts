@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { addDays, dayOfWeek, monthEnd, todayLocal, weekStart } from "../lib/dates.js";
-import { buildEntryMap, completionRatio, dailyProgress, isScheduled } from "./progress.js";
+import {
+  buildEntryMap,
+  completionRatio,
+  consistency,
+  dailyProgress,
+  isScheduled,
+} from "./progress.js";
 import { computeStreak } from "./streaks.js";
 import { suggestTarget, targetWarning, weekStats } from "./week.js";
 import type { DomainEntry, DomainHabit } from "./types.js";
@@ -212,4 +218,56 @@ test("big jumps warn, deloads are legitimised", () => {
   assert.match(targetWarning(90, 51.2)!, /how week one fails/);
   assert.equal(targetWarning(55, 51.2), null);
   assert.match(targetWarning(45, 51.2)!, /not a failure/);
+});
+
+// --- overall consistency rating ---------------------------------------------
+
+/** `days` back from 2026-08-26, oldest first, each either fully done or fully missed. */
+function history(days: boolean[]) {
+  const h = habit({ activeFrom: "2020-01-01" });
+  const today = "2026-08-26";
+  return days.map((done, i) => {
+    const date = addDays(today, -(days.length - i));
+    const map = buildEntryMap(done ? [entry("h1", date, 1)] : []);
+    return dailyProgress([h], map, date, 2, today);
+  });
+}
+
+test("no rating until a finished day exists", () => {
+  const c = consistency([], 30);
+  assert.equal(c.ovr, null);
+  assert.equal(c.daysCounted, 0);
+  assert.equal(c.delta, null);
+});
+
+test("rating averages completed days, not today", () => {
+  // Three of four days done -> 75.
+  const c = consistency(history([true, true, true, false]), 30);
+  assert.equal(c.ovr, 75);
+  assert.equal(c.daysCounted, 4);
+});
+
+test("days with nothing scheduled never dilute the rating", () => {
+  const weekdaysOnly = habit({ scheduleDays: [1, 2, 3, 4, 5], activeFrom: "2020-01-01" });
+  const today = "2026-08-26";
+  const days = [];
+  for (let back = 14; back >= 1; back--) {
+    const date = addDays(today, -back);
+    // Every scheduled day done; weekends simply aren't scheduled.
+    const map = buildEntryMap([entry("h1", date, 1)]);
+    days.push(dailyProgress([weekdaysOnly], map, date, 2, today));
+  }
+  const c = consistency(days, 30);
+  assert.equal(c.ovr, 100); // a rest day is not a failed day
+  assert.ok(c.daysCounted < 14);
+});
+
+test("delta compares against the window before it, and needs one to exist", () => {
+  // Window of 2: previous two missed, recent two done -> +100.
+  const c = consistency(history([false, false, true, true]), 2);
+  assert.equal(c.ovr, 100);
+  assert.equal(c.delta, 100);
+
+  // Nothing behind the first window to compare against.
+  assert.equal(consistency(history([true, true]), 2).delta, null);
 });

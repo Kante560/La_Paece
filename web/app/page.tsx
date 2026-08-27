@@ -7,6 +7,7 @@ import Coachmarks, { type CoachStep } from "@/components/Coachmarks";
 import Disclosure from "@/components/Disclosure";
 import HabitForm, { type HabitDraft } from "@/components/HabitForm";
 import HabitRow from "@/components/HabitRow";
+import Ovr from "@/components/Ovr";
 import Ring from "@/components/Ring";
 import SignOff from "@/components/SignOff";
 import { PageLoader } from "@/components/loader";
@@ -240,19 +241,15 @@ export default function TodayPage() {
         </p>
       )}
 
-      {/* --- Morning: intention + the three things ------------------------- */}
+      {/* --- Overall consistency rating ------------------------------------ */}
+      <Ovr data={view.consistency} />
+
+      {/* --- Morning: the three things ------------------------------------- */}
       {(mode === "morning" || mode === "day") && (
         <section className="card px-4 py-3">
-          <h2 className="label-hand text-lg">Today I will</h2>
-          <textarea
-            defaultValue={view.day?.intention ?? ""}
-            onChange={(e) => saveDay({ intention: e.target.value })}
-            rows={2}
-            placeholder="Be the person I want to become."
-            className="field mt-1"
-          />
+          <h2 className="label-hand text-lg">The three things</h2>
 
-          <ul className="mt-2 space-y-1">
+          <ul className="mt-1 space-y-1">
             {view.todos.map((todo) => (
               <li key={todo.id} className="flex items-center gap-3 py-1">
                 <Check

@@ -16,7 +16,7 @@ model User {
   passwordHash String
 
   // Day boundary. dayStartHour=4 means 1:40am still counts as "yesterday".
-  timezone     String @default("America/Los_Angeles")
+  timezone     String @default("Africa/Lagos")
   dayStartHour Int    @default(4)
 
   // Non-negotiables count this many times a normal habit in the daily %.

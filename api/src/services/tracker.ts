@@ -10,10 +10,10 @@ import {
   weekStart,
   type LocalDate,
 } from "../lib/dates.js";
-import { averagePct, buildEntryMap, dailyProgress } from "../domain/progress.js";
+import { averagePct, buildEntryMap, consistency, dailyProgress } from "../domain/progress.js";
 import { computeStreak, type Streak } from "../domain/streaks.js";
 import { suggestTarget, weekStats, type WeekStats } from "../domain/week.js";
-import type { DomainEntry, DomainHabit } from "../domain/types.js";
+import type { DayProgress, DomainEntry, DomainHabit } from "../domain/types.js";
 import type { AuthedUser } from "../auth.js";
 
 export async function loadHabits(userId: string): Promise<DomainHabit[]> {
@@ -54,6 +54,13 @@ export async function loadEntries(
   }));
 }
 
+/*
+ * The rating window, and the matching window behind it that the delta compares
+ * against. Thirty days is long enough that one bad week can't define you and
+ * short enough that a month you've moved on from can't flatter you.
+ */
+const CONSISTENCY_WINDOW = 30;
+
 /** Everything the Today screen needs, in one round trip. */
 export async function getDayView(user: AuthedUser, date: LocalDate, today: LocalDate) {
   const habits = await loadHabits(user.id);
@@ -64,6 +71,19 @@ export async function getDayView(user: AuthedUser, date: LocalDate, today: Local
   const map = buildEntryMap(entries);
 
   const progress = dailyProgress(activeHabits, map, date, user.nonNegotiableWeight, today);
+
+  /*
+   * Rebuild the days behind this one so the rating has something to average.
+   * No extra queries — loadEntries() above already reaches back 400 days for
+   * the streaks, so this is pure arithmetic over a map that's already in hand.
+   */
+  const history: DayProgress[] = [];
+  for (let back = CONSISTENCY_WINDOW * 2; back >= 1; back--) {
+    history.push(
+      dailyProgress(activeHabits, map, addDays(date, -back), user.nonNegotiableWeight, today),
+    );
+  }
+
   const streaks: Record<string, Streak> = {};
   for (const h of activeHabits) streaks[h.id] = computeStreak(h, map, today);
 
@@ -80,6 +100,7 @@ export async function getDayView(user: AuthedUser, date: LocalDate, today: Local
     today,
     habits: activeHabits,
     progress,
+    consistency: consistency(history, CONSISTENCY_WINDOW),
     streaks,
     day: day
       ? {

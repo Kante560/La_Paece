@@ -37,7 +37,7 @@ async function main() {
     create: {
       email,
       passwordHash,
-      timezone: process.env.APP_TIMEZONE || "America/Los_Angeles",
+      timezone: process.env.APP_TIMEZONE || "Africa/Lagos",
     },
     update: { passwordHash },
   });

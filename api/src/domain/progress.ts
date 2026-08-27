@@ -117,6 +117,47 @@ export function averagePct(days: DayProgress[]): number {
   return round2(counted.reduce((s, d) => s + d.pct, 0) / counted.length);
 }
 
+export interface Consistency {
+  /** 0..100, or null until there is any completed day to rate. */
+  ovr: number | null;
+  daysCounted: number;
+  /** Change against the window immediately before this one, or null if there isn't one. */
+  delta: number | null;
+  windowDays: number;
+}
+
+/**
+ * Overall consistency rating — one number for how you have actually been
+ * living, as opposed to how today happens to be going.
+ *
+ * Today is deliberately excluded. A day in progress is mostly empty boxes, so
+ * folding it in would sink the rating every morning and haul it back every
+ * night; a headline that swings forty points before breakfast tells you nothing
+ * about your consistency. It is the same reason dailyProgress() calls an empty
+ * box today "pending" rather than a miss.
+ *
+ * Days with nothing scheduled are skipped rather than scored zero, so a rest
+ * day cannot dilute the rating and a habit added last week cannot invent misses
+ * for the weeks before it existed.
+ */
+export function consistency(history: DayProgress[], windowDays: number): Consistency {
+  const recent = history.slice(-windowDays).filter((d) => d.weightedTotal > 0);
+  const previous = history.slice(-windowDays * 2, -windowDays).filter((d) => d.weightedTotal > 0);
+
+  if (recent.length === 0) {
+    return { ovr: null, daysCounted: 0, delta: null, windowDays };
+  }
+
+  const now = averagePct(recent);
+  return {
+    ovr: Math.round(now),
+    daysCounted: recent.length,
+    // Needs both windows to mean anything. One week against nothing is not a trend.
+    delta: previous.length > 0 ? Math.round(now - averagePct(previous)) : null,
+    windowDays,
+  };
+}
+
 export function buildEntryMap(entries: DomainEntry[]): Map<string, DomainEntry> {
   return new Map(entries.map((e) => [`${e.habitId}|${e.date}`, e]));
 }

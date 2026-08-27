@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Inter } from "next/font/google";
+import InstallPrompt from "@/components/InstallPrompt";
 import Nav from "@/components/Nav";
 import ServiceWorker from "@/components/ServiceWorker";
 import "./globals.css";
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ServiceWorker />
         <main className="mx-auto min-h-dvh max-w-lg px-4 pb-24 pt-6">{children}</main>
+        <InstallPrompt />
         <Nav />
       </body>
     </html>
