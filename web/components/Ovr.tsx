@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import type { Consistency } from "@/lib/types";
 
 /**
@@ -27,7 +30,60 @@ const TONE: Record<string, string> = {
   accent: "var(--accent)",
 };
 
-export default function Ovr({ data }: { data: Consistency }) {
+/*
+ * Dev-only preview hook.
+ *
+ * The real rating deliberately stays blank until a day has finished, which
+ * makes the card impossible to judge on the day you build it. `?ovr=78` fakes
+ * a value so the design can be reviewed immediately; `&delta=-4&days=21` fill
+ * in the trend chip and the caption, and `?ovr=none` forces the empty state.
+ *
+ * The NODE_ENV check is a build-time literal, so none of this survives a
+ * production build — there is no route by which a real rating can be faked.
+ */
+function usePreviewOverride(): Consistency | null {
+  const [preview, setPreview] = useState<Consistency | null>(null);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const q = new URLSearchParams(window.location.search);
+    const raw = q.get("ovr");
+    if (raw === null) return;
+    setPreview({
+      ovr: raw === "" || raw === "none" ? null : Number(raw),
+      delta: q.has("delta") ? Number(q.get("delta")) : null,
+      daysCounted: Number(q.get("days") ?? 30),
+      windowDays: 30,
+    });
+  }, []);
+
+  return preview;
+}
+
+/**
+ * The box drawn round the rating.
+ *
+ * A CSS dashed border is metronomic — every dash and every gap identical, which
+ * reads as printed. A long, uneven dash pattern with round caps reads as a box
+ * someone ringed round the number by hand instead.
+ *
+ * Deliberately no viewBox: one user unit is then one CSS pixel, so the edges
+ * stay level and the corners stay circular whatever shape the card takes. An
+ * earlier version stretched a square viewBox to fit, which sheared the corners
+ * into ellipses and tilted every edge.
+ */
+function HandBox({ color }: { color: string }) {
+  return (
+    <svg className="hand-box" style={{ color }} aria-hidden="true">
+      <rect x="0" y="0" width="100%" height="100%" rx="12" />
+    </svg>
+  );
+}
+
+export default function Ovr({ data: real }: { data: Consistency }) {
+  const preview = usePreviewOverride();
+  const data = preview ?? real;
+
   /*
    * No rating until there's a finished day behind it. Showing "0" to someone on
    * their first morning is both wrong and the single most discouraging thing
@@ -35,7 +91,8 @@ export default function Ovr({ data }: { data: Consistency }) {
    */
   if (data.ovr === null) {
     return (
-      <section className="card px-4 py-5">
+      <section className="relative px-4 py-5">
+        <HandBox color="var(--ink-faint)" />
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[11px] uppercase tracking-[0.18em] text-ink-faint">
             Consistency
@@ -58,7 +115,12 @@ export default function Ovr({ data }: { data: Consistency }) {
   const flat = data.delta === 0;
 
   return (
-    <section className="card px-4 py-5">
+    /*
+     * No fill, no shadow — a dashed rule in the tier's own colour, so the card
+     * reads as something ruled onto the page rather than laid on top of it.
+     */
+    <section className="relative px-4 py-5">
+      <HandBox color={color} />
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[11px] uppercase tracking-[0.18em] text-ink-faint">Consistency</span>
         {data.delta !== null && (

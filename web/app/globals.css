@@ -245,3 +245,302 @@ input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* ---------------------------------------------------------------------------
+ * The book.
+ *
+ * A turn is a fold, not a spine rotation — see lib/flip.ts for why, and for all
+ * of the geometry. Everything here is inert scaffolding: the component writes
+ * the transforms, clips and gradients frame by frame, because the turn changes
+ * clip-paths and gradient stops, which no keyframe engine composites anyway.
+ *
+ * Nothing here puts `perspective` on <body>: perspective makes an element the
+ * containing block for its fixed descendants, and every overlay in this app is
+ * a child of <body> via Portal. The 3D lives on .book-fold, whose only
+ * descendants are its own.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * The ruled sheet.
+ *
+ * Every layer in a turn needs its own opaque copy of the page texture. The
+ * texture normally lives on <body>, so an untreated layer is transparent and
+ * the page underneath reads straight through it — two pages at once. `fixed`
+ * attachment is what keeps the rules on a scrolled live page lined up with the
+ * frozen viewport-sized layers around it.
+ */
+.book-ruled {
+  background-color: var(--paper);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    var(--rule) 31px,
+    var(--rule) 32px
+  );
+  background-attachment: fixed;
+}
+
+.book-stage {
+  position: relative;
+  z-index: 2;
+}
+/* Held back until the new route commits, so the page being left is never
+   re-rendered — and never flashes its loader — under the sheet leaving it. */
+.book-hold {
+  visibility: hidden;
+}
+
+/* Frozen pages: the outgoing one underneath everything, the incoming one above
+   it on a back turn. Both are viewport boxes holding a full-page clone. */
+.book-beneath,
+.book-base {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.book-beneath {
+  z-index: 0;
+}
+.book-base {
+  z-index: 1;
+}
+.book-sheet {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+}
+
+.book-fold {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 1200px;
+  perspective-origin: 50% 50%;
+}
+
+.book-flap,
+.book-facet {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 0 50%;
+}
+
+/* Two faces per facet: the page on the front, blank ruled paper on the back —
+   which is what the reverse of a diary page actually looks like. */
+.book-face,
+.book-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+.book-back {
+  transform: rotateY(180deg);
+}
+.book-shade {
+  position: absolute;
+  inset: 0;
+}
+
+/* The crease throws a shadow both ways onto whatever lies under it. */
+.book-crease {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0;
+}
+.book-crease-l {
+  width: 90px;
+  left: -90px;
+  background: linear-gradient(to right, rgba(40, 32, 18, 0), rgba(40, 32, 18, 0.26));
+}
+.book-crease-r {
+  width: 70px;
+  left: 0;
+  background: linear-gradient(to right, rgba(40, 32, 18, 0.24), rgba(40, 32, 18, 0));
+}
+
+/* ---- Turning: the edges ---------------------------------------------------
+ * Pointer-only, and only once the window is wide enough that the strips sit
+ * clear of the reading column. Narrow windows and touch get the swipe, the
+ * arrow keys and the folio instead.
+ * ------------------------------------------------------------------------- */
+.book-edge {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 46rem) {
+  .book-edge {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: clamp(48px, 7vw, 96px);
+    z-index: 4;
+    cursor: pointer;
+    background: transparent;
+  }
+  .book-edge:disabled {
+    cursor: default;
+  }
+  .book-edge-back {
+    left: 0;
+  }
+  .book-edge-fwd {
+    right: 0;
+  }
+
+  /* A page edge lifting — a soft wedge of shadow, shown only on approach. */
+  .book-edge-mark {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 180ms ease-out;
+    background: linear-gradient(to left, var(--shadow), transparent 70%);
+  }
+  .book-edge-back .book-edge-mark {
+    background: linear-gradient(to right, var(--shadow), transparent 70%);
+  }
+  .book-edge:hover:not(:disabled) .book-edge-mark,
+  .book-edge:focus-visible .book-edge-mark {
+    opacity: 1;
+  }
+  .book-edge:focus-visible {
+    outline: 1px dashed var(--ink-faint);
+    outline-offset: -6px;
+  }
+}
+
+/* ---- The folio ------------------------------------------------------------
+ * The page number at the foot of the page. Tapping it slides the rest of the
+ * book's numbers out either side — no overlay, no dimming, the page stays
+ * readable behind them — and tapping one of those turns to it. The labels ride
+ * along because a bare "4" tells you nothing about where it goes.
+ * ------------------------------------------------------------------------- */
+.folio {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 0.35rem);
+  z-index: 30;
+  max-width: 100vw;
+}
+
+.folio-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0.25rem 0.5rem;
+}
+
+.folio-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 3.5rem;
+  padding-block: 0.2rem;
+  color: var(--ink-faint);
+  transition:
+    width 320ms cubic-bezier(0.42, 0, 0.22, 1),
+    opacity 200ms ease-out,
+    color 200ms ease-out;
+}
+/* Closed, every leaf but the current one folds away to nothing. */
+.folio:not([data-open]) .folio-slot:not([data-current]) {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.folio[data-open] .folio-slot[data-current] {
+  color: var(--accent);
+}
+
+.folio-num {
+  position: relative;
+  font-family: var(--font-hand), cursive;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+/* Closed, the number sits between two short rules, as a printed folio does. */
+.folio:not([data-open]) .folio-slot[data-current] .folio-num::before,
+.folio:not([data-open]) .folio-slot[data-current] .folio-num::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 0.6rem;
+  height: 1px;
+  background: var(--rule);
+}
+.folio:not([data-open]) .folio-slot[data-current] .folio-num::before {
+  right: calc(100% + 0.4rem);
+}
+.folio:not([data-open]) .folio-slot[data-current] .folio-num::after {
+  left: calc(100% + 0.4rem);
+}
+
+.folio-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 200ms ease-out 80ms,
+    transform 200ms ease-out 80ms;
+}
+.folio[data-open] .folio-label {
+  opacity: 1;
+  transform: none;
+}
+.folio-slot:focus-visible {
+  outline: 1px dashed var(--ink-faint);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The turn is atmosphere, not information. Book.tsx skips the whole rig here
+   and just goes to the page. */
+@media (prefers-reduced-motion: reduce) {
+  .folio-slot,
+  .folio-label {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The hand-drawn box round the consistency rating.
+ *
+ * Inset by a pixel and left to overflow, so the stroke straddling the edge is
+ * never clipped. The <svg> carries no viewBox on purpose — see HandBox in
+ * components/Ovr.tsx — which is what keeps the edges level and the corners
+ * round however tall or short the card ends up.
+ * ------------------------------------------------------------------------- */
+.hand-box {
+  position: absolute;
+  inset: 1px;
+  /*
+   * Explicit, because <svg> is a replaced element: with `width: auto` an
+   * absolutely positioned one falls back to its intrinsic 300x150 and ignores
+   * the `right`/`bottom` offsets, so the box stops short of the card instead of
+   * ringing all of it.
+   */
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+.hand-box rect {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-dasharray: 26 7 12 6 34 8 19 6 41 9 15 7;
+}

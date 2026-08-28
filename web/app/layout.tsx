@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Inter } from "next/font/google";
+import Book from "@/components/Book";
 import InstallPrompt from "@/components/InstallPrompt";
-import Nav from "@/components/Nav";
 import ServiceWorker from "@/components/ServiceWorker";
 import "./globals.css";
 
@@ -39,9 +39,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${hand.variable} ${sans.variable}`}>
       <body>
         <ServiceWorker />
-        <main className="mx-auto min-h-dvh max-w-lg px-4 pb-24 pt-6">{children}</main>
+        <Book>{children}</Book>
         <InstallPrompt />
-        <Nav />
       </body>
     </html>
   );

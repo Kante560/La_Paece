@@ -105,8 +105,8 @@ export default function InstallPrompt() {
   return (
     <div
       className="fade-up fixed inset-x-0 z-40 px-4"
-      /* Clears the tab bar, which sits on the safe-area inset itself. */
-      style={{ bottom: "calc(env(safe-area-inset-bottom) + 4.25rem)" }}
+      /* Clears the folio, which sits on the safe-area inset itself. */
+      style={{ bottom: "calc(env(safe-area-inset-bottom) + 3.5rem)" }}
       role="dialog"
       aria-label="Install La Paece"
     >
