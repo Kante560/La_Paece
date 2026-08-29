@@ -83,8 +83,9 @@ export default function InstallPrompt() {
     };
   }, []);
 
-  // The login screen is the one place a "keep this on your phone" pitch is premature.
-  if (pathname === "/login") return null;
+  // Signing in, signing up and first-run setup are all too early for a
+  // "keep this on your phone" pitch — there is nothing on the phone yet.
+  if (pathname === "/login" || pathname === "/signup" || pathname === "/welcome") return null;
   if (!deferred && !iosHint) return null;
 
   const dismiss = () => {

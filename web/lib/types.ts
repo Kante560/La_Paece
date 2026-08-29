@@ -79,6 +79,8 @@ export interface Me {
   nonNegotiableWeight: number;
   today: string;
   localHour: number;
+  /** No habits and setup never finished — send them to /welcome. */
+  needsSetup: boolean;
 }
 
 export interface DayView {

@@ -79,3 +79,18 @@ export function eachDay(from: LocalDate, to: LocalDate): LocalDate[] {
 export function isValidLocalDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(new Date(`${s}T00:00:00.000Z`).getTime());
 }
+
+/**
+ * Whether a string is an IANA zone this runtime knows. Signup takes the zone
+ * from the browser, so it is untrusted input — an unknown one stored here would
+ * throw on every later date calculation for that account, not at the point it
+ * was accepted.
+ */
+export function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}

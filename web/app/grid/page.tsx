@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Coachmarks, { type CoachStep } from "@/components/Coachmarks";
 import { PageLoader } from "@/components/loader";
 import { ApiError, get, put } from "@/lib/api";
+import { recall, remember } from "@/lib/cache";
 import type { GridView } from "@/lib/types";
 
 const COACH: CoachStep[] = [
@@ -27,9 +28,14 @@ const MARK: Record<string, string> = {
   pending: "",
 };
 
+/** Each month is its own view, so each gets its own cache entry. */
+const gridKey = (m: string | null) => `view:grid:${m ?? "current"}`;
+
 export default function GridPage() {
   const [month, setMonth] = useState<string | null>(null);
-  const [view, setView] = useState<GridView | null>(null);
+  // Seeded from the last render of this page so a turn lands on real content
+  // rather than the loader. The fetch below still runs and corrects it.
+  const [view, setView] = useState<GridView | null>(() => recall<GridView>(gridKey(null)));
   const [today, setToday] = useState("");
   const [note, setNote] = useState<string | null>(null);
 
@@ -38,7 +44,7 @@ export default function GridPage() {
       get<GridView>(`/views/grid${m ? `?month=${m}` : ""}`),
       get<{ today: string }>("/auth/me"),
     ]);
-    setView(g);
+    setView(remember(gridKey(m), g));
     setToday(me.today);
   }, []);
 

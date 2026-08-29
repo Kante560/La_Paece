@@ -8,12 +8,16 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// User — single-user app for v1, but modelled properly so it never blocks you.
+// User — anyone can sign up; accounts are fully isolated by userId throughout.
 // ---------------------------------------------------------------------------
 model User {
   id           String @id @default(cuid())
   email        String @unique
   passwordHash String
+
+  // First-run setup is done. Set even when someone starts with no habits at
+  // all, which is why it can't be inferred from the habit count alone.
+  onboardedAt DateTime?
 
   // Day boundary. dayStartHour=4 means 1:40am still counts as "yesterday".
   timezone     String @default("Africa/Lagos")

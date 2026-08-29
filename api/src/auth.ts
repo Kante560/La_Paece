@@ -13,6 +13,7 @@ export interface AuthedUser {
   timezone: string;
   dayStartHour: number;
   nonNegotiableWeight: number;
+  onboardedAt: Date | null;
 }
 
 declare global {
@@ -94,6 +95,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       timezone: user.timezone,
       dayStartHour: user.dayStartHour,
       nonNegotiableWeight: user.nonNegotiableWeight,
+      onboardedAt: user.onboardedAt,
     };
     next();
   } catch (err) {

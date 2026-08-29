@@ -544,3 +544,88 @@ input[type="number"]::-webkit-inner-spin-button {
   stroke-linecap: round;
   stroke-dasharray: 26 7 12 6 34 8 19 6 41 9 15 7;
 }
+
+/* ---------------------------------------------------------------------------
+ * Opening the book.
+ *
+ * The sign-in screen is the cover: it hinges on its top edge and swings up and
+ * away, the way you'd open a top-bound notebook, with the first page behind it.
+ * A vertical hinge would have read as another page turn, which is the one thing
+ * arriving in the book should not feel like.
+ *
+ * Perspective sits high on the stage rather than dead centre, so the cover
+ * lifts *towards* the reader instead of tipping away over the horizon.
+ * ------------------------------------------------------------------------- */
+.book-cover-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 1500px;
+  perspective-origin: 50% 18%;
+}
+
+.book-cover {
+  position: absolute;
+  inset: 0;
+  transform-origin: center top;
+  transform-style: preserve-3d;
+}
+.book-cover-stage.is-lifting .book-cover {
+  animation: cover-lift var(--cover-turn, 1000ms) cubic-bezier(0.5, 0, 0.25, 1) both;
+}
+
+.book-cover-face,
+.book-cover-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+/* The underside of the cover — blank board, no print on it. */
+.book-cover-back {
+  transform: rotateX(180deg);
+}
+
+/* Light sliding off the board as it comes up past the reader. */
+.book-cover-shade {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0) 68%);
+}
+.book-cover-stage.is-lifting .book-cover-shade {
+  animation: cover-shade var(--cover-turn, 1000ms) cubic-bezier(0.5, 0, 0.25, 1) both;
+}
+
+@keyframes cover-lift {
+  from {
+    transform: rotateX(0deg);
+  }
+  /* Held flat for a beat first, so it reads as being picked up, not flung. */
+  12% {
+    transform: rotateX(4deg);
+  }
+  to {
+    transform: rotateX(122deg);
+  }
+}
+@keyframes cover-shade {
+  from {
+    opacity: 0;
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Book.tsx skips the whole thing, but never leave a rule that could animate. */
+  .book-cover-stage.is-lifting .book-cover,
+  .book-cover-stage.is-lifting .book-cover-shade {
+    animation: none;
+  }
+}

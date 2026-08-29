@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
 import { fromDbDate, toDbDate, todayLocal } from "../lib/dates.js";
+import { STARTER_HABITS, STARTER_BY_KEY } from "../domain/starterHabits.js";
 import { loadHabits } from "../services/tracker.js";
 
 export const habitsRouter = Router();
@@ -21,6 +22,53 @@ const habitSchema = z.object({
 
 habitsRouter.get("/", async (req, res) => {
   res.json(await loadHabits(req.user!.id));
+});
+
+/** The first-run catalogue. Static, but behind auth like everything else here. */
+habitsRouter.get("/starter", (_req, res) => {
+  res.json(STARTER_HABITS);
+});
+
+/**
+ * Finish first-run setup.
+ *
+ * An empty `keys` is a real answer, not a no-op — "start blank" still marks the
+ * account set up, or the next visit would drag them back through the picker.
+ * Unknown keys are dropped rather than rejected, so a stale client can't lock
+ * someone out of finishing setup.
+ */
+habitsRouter.post("/starter", async (req, res) => {
+  const parsed = z.object({ keys: z.array(z.string()).default([]) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "keys must be a list" });
+
+  const user = req.user!;
+  const chosen = parsed.data.keys
+    .map((k) => STARTER_BY_KEY.get(k))
+    .filter((h): h is NonNullable<typeof h> => Boolean(h));
+
+  const activeFrom = toDbDate(todayLocal(user.timezone, user.dayStartHour));
+  const existing = await prisma.habit.count({ where: { userId: user.id, archivedAt: null } });
+
+  await prisma.$transaction([
+    prisma.habit.createMany({
+      data: chosen.map((h, i) => ({
+        userId: user.id,
+        name: h.name,
+        category: h.category,
+        type: h.type,
+        target: h.target ?? null,
+        unit: h.unit ?? null,
+        scheduleDays: h.scheduleDays,
+        resolveWindow: h.resolveWindow ?? "SAME_DAY",
+        sortOrder: existing + i,
+        activeFrom,
+      })),
+      skipDuplicates: true,
+    }),
+    prisma.user.update({ where: { id: user.id }, data: { onboardedAt: new Date() } }),
+  ]);
+
+  return res.status(201).json({ created: chosen.length });
 });
 
 habitsRouter.post("/", async (req, res) => {

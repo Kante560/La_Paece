@@ -5,6 +5,7 @@ import Coachmarks, { type CoachStep } from "@/components/Coachmarks";
 import { PageLoader } from "@/components/loader";
 import { del, get, post, put } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { recall, remember } from "@/lib/cache";
 import type { PaceStatus, WeekView } from "@/lib/types";
 
 const COACH: CoachStep[] = [
@@ -32,7 +33,9 @@ const COPY: Record<PaceStatus, { label: string; tone: string }> = {
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function WeekPage() {
-  const [view, setView] = useState<WeekView | null>(null);
+  // Seeded from the last render of this page so a turn lands on real content
+  // rather than the loader. The fetch below still runs and corrects it.
+  const [view, setView] = useState<WeekView | null>(() => recall<WeekView>("view:week"));
   const [draft, setDraft] = useState<number | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [today, setToday] = useState("");
@@ -42,7 +45,7 @@ export default function WeekPage() {
       get<WeekView>("/views/week"),
       get<{ today: string }>("/auth/me"),
     ]);
-    setView(w);
+    setView(remember("view:week", w));
     setToday(me.today);
     setDraft((d) => d ?? w.suggestedTarget);
   }, []);

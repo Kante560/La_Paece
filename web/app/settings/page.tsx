@@ -5,13 +5,17 @@ import { resetAllCoachmarks } from "@/components/Coachmarks";
 import TimezonePicker from "@/components/TimezonePicker";
 import { PageLoader } from "@/components/loader";
 import { get, patch, post } from "@/lib/api";
+import { forgetAll, recall, remember } from "@/lib/cache";
+import { resetWarm } from "@/lib/preload";
 import type { Me } from "@/lib/types";
 
 export default function SettingsPage() {
-  const [me, setMe] = useState<Me | null>(null);
+  // Seeded from the last render of this page so a turn lands on real content
+  // rather than the loader. The fetch below still runs and corrects it.
+  const [me, setMe] = useState<Me | null>(() => recall<Me>("view:me"));
   const [theme, setTheme] = useState<"system" | "day" | "night">("system");
 
-  const load = useCallback(async () => setMe(await get<Me>("/auth/me")), []);
+  const load = useCallback(async () => setMe(remember("view:me", await get<Me>("/auth/me"))), []);
 
   useEffect(() => {
     load().catch(() => {});
@@ -139,6 +143,9 @@ export default function SettingsPage() {
         type="button"
         onClick={async () => {
           await post("/auth/logout");
+          // Never seed one account's day into the next person's session.
+          forgetAll();
+          resetWarm();
           window.location.href = "/login";
         }}
         className="w-full rounded border border-rule py-2.5 text-[14px] text-ink-soft"

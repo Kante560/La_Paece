@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActionMenu from "@/components/ActionMenu";
 import Check from "@/components/Check";
@@ -12,6 +13,7 @@ import Ring from "@/components/Ring";
 import SignOff from "@/components/SignOff";
 import { PageLoader } from "@/components/loader";
 import { del, get, patch, post, put } from "@/lib/api";
+import { recall, remember } from "@/lib/cache";
 import { useAutosave } from "@/lib/hooks";
 import { applyEntry, clearEntry } from "@/lib/progress";
 import { MISS_REASONS, type DayView, type Habit, type Me } from "@/lib/types";
@@ -51,7 +53,9 @@ const COACH: CoachStep[] = [
 
 export default function TodayPage() {
   const [me, setMe] = useState<Me | null>(null);
-  const [view, setView] = useState<DayView | null>(null);
+  // Seeded from the last render of this page so a turn lands on real content
+  // rather than the loader. The fetch below still runs and corrects it.
+  const [view, setView] = useState<DayView | null>(() => recall<DayView>("view:today"));
   const [mode, setMode] = useState<Mode>("day");
   const [newTodo, setNewTodo] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -69,14 +73,24 @@ export default function TodayPage() {
    * overwrite a newer local edit and the UI would visibly snap backwards,
    * which is the flicker this whole dance exists to prevent.
    */
+  const router = useRouter();
   const writes = useRef(0);
 
   const load = useCallback(async () => {
     const [meRes, dayRes] = await Promise.all([get<Me>("/auth/me"), get<DayView>("/views/today")]);
+    /*
+     * Setup was abandoned part-way. Today would be an empty page with nothing
+     * to tick and no rating, which reads as a broken app rather than an
+     * unfinished one — so finish setting up first.
+     */
+    if (meRes.needsSetup) {
+      router.replace("/welcome");
+      return;
+    }
     setMe(meRes);
-    setView(dayRes);
+    setView(remember("view:today", dayRes));
     setMode(modeFor(meRes.localHour));
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     load().catch(() => {});

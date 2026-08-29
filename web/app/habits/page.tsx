@@ -6,6 +6,7 @@ import Coachmarks, { type CoachStep } from "@/components/Coachmarks";
 import HabitForm, { DOW, type HabitDraft } from "@/components/HabitForm";
 import { PageLoader } from "@/components/loader";
 import { del, get, patch, post } from "@/lib/api";
+import { recall, remember } from "@/lib/cache";
 import { useLongPress } from "@/lib/useLongPress";
 import type { Habit, HabitCategory } from "@/lib/types";
 
@@ -23,7 +24,9 @@ const COACH: CoachStep[] = [
 ];
 
 export default function HabitsPage() {
-  const [habits, setHabits] = useState<Habit[] | null>(null);
+  // Seeded from the last render of this page so a turn lands on real content
+  // rather than the loader. The fetch below still runs and corrects it.
+  const [habits, setHabits] = useState<Habit[] | null>(() => recall<Habit[]>("view:habits"));
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Habit | null>(null);
   const [addCategory, setAddCategory] = useState<HabitCategory>("NON_NEGOTIABLE");
@@ -31,7 +34,8 @@ export default function HabitsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setHabits((await get<Habit[]>("/habits")).filter((h) => !h.archivedAt));
+    const live = (await get<Habit[]>("/habits")).filter((h) => !h.archivedAt);
+    setHabits(remember("view:habits", live));
   }, []);
 
   useEffect(() => {

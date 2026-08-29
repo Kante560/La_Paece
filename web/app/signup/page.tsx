@@ -5,35 +5,50 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import PasswordInput from "@/components/PasswordInput";
-import { get, post } from "@/lib/api";
+import { post } from "@/lib/api";
 import { requestBookOpen } from "@/lib/bookOpen";
 import { forgetAll } from "@/lib/cache";
 import { resetWarm } from "@/lib/preload";
-import type { Me } from "@/lib/types";
-import { currentPasswordError, emailError } from "@/lib/validate";
+import { MIN_PASSWORD, emailError, newPasswordError } from "@/lib/validate";
 
-export default function LoginPage() {
+/**
+ * The timezone is read here rather than asked for.
+ *
+ * The 4am day boundary is the core of this app, and it is wrong for everyone
+ * whose zone is wrong — but making that someone's second-ever decision, before
+ * they have seen a single screen, costs more signups than it saves. The browser
+ * knows the answer, the API validates it, and Settings can correct it.
+ */
+function detectTimezone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  /*
+   * Nothing is marked wrong until it has been left, or until submit. Validating
+   * on the first keystroke tells someone their address is invalid while they
+   * are still on the "j" of their own name — technically true, and unpleasant.
+   */
   const [touched, setTouched] = useState({ email: false, password: false });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
   const emailProblem = emailError(email);
-  const passwordProblem = currentPasswordError(password);
+  const passwordProblem = newPasswordError(password);
   const showEmail = touched.email && emailProblem;
   const showPassword = touched.password && passwordProblem;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setTouched({ email: true, password: true });
-    /*
-     * Catching an empty or malformed field here isn't only about the round
-     * trip: failed sign-ins are rate limited to three, and spending one of them
-     * on a typo the browser could see is a bad trade.
-     */
     if (emailProblem || passwordProblem) {
       if (emailProblem) emailRef.current?.focus();
       return;
@@ -42,19 +57,16 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await post("/auth/login", { email, password });
+      await post("/auth/signup", { email, password, timezone: detectTimezone() });
       // A different account starts from nothing, never the last one's views.
       forgetAll();
       resetWarm();
-      // An account that never finished setup has nothing to show on Today.
-      const me = await get<Me>("/auth/me");
-      // Lift the cover on the way in — this screen is the one that lifts,
-      // so it has to be requested while it is still the page on screen.
+      // Signup always lands in setup — a new account has no habits yet.
       requestBookOpen();
-      router.push(me.needsSetup ? "/welcome" : "/");
+      router.push("/welcome");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Could not create your account");
       setBusy(false);
     }
   }
@@ -70,8 +82,10 @@ export default function LoginPage() {
           priority
           className="rounded-xl border border-rule"
         />
-        <h1 className="section-title mt-4 text-2xl">La Paece</h1>
-        <p className="mt-2 text-[13px] text-ink-faint">Keep pushing the stone.</p>
+        <h1 className="section-title mt-4 text-2xl">Start your book</h1>
+        <p className="mt-2 text-[13px] text-ink-faint">
+          One page a day. It only works if it&apos;s yours.
+        </p>
       </div>
 
       <form onSubmit={submit} noValidate className="space-y-4">
@@ -84,7 +98,7 @@ export default function LoginPage() {
             ref={emailRef}
             type="email"
             inputMode="email"
-            autoComplete="username"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, email: true }))}
@@ -109,15 +123,23 @@ export default function LoginPage() {
             value={password}
             onChange={setPassword}
             onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-            autoComplete="current-password"
+            autoComplete="new-password"
             invalid={Boolean(showPassword)}
-            describedBy={showPassword ? "pw-error" : undefined}
+            describedBy="pw-hint"
           />
-          {showPassword && (
-            <p id="pw-error" role="alert" className="mt-1 text-[12px] text-accent">
-              {passwordProblem}
-            </p>
-          )}
+          {/*
+            One line that does both jobs. A separate error message would make
+            the hint and the complaint say the same thing twice, and the count
+            is more use than "too short" while you're still typing.
+          */}
+          <p
+            id="pw-hint"
+            role={showPassword ? "alert" : undefined}
+            className="mt-1 text-[12px]"
+            style={{ color: showPassword ? "var(--accent)" : "var(--ink-faint)" }}
+          >
+            {showPassword ? passwordProblem : `At least ${MIN_PASSWORD} characters.`}
+          </p>
         </div>
 
         {error && (
@@ -131,14 +153,14 @@ export default function LoginPage() {
           disabled={busy}
           className="w-full rounded bg-ink py-2.5 text-[15px] text-paper disabled:opacity-50"
         >
-          {busy ? "…" : "Enter"}
+          {busy ? "…" : "Create account"}
         </button>
       </form>
 
       <p className="mt-6 text-center text-[13px] text-ink-faint">
-        No account yet?{" "}
-        <Link href="/signup" className="underline underline-offset-2 hover:text-ink-soft">
-          Start your book
+        Already have one?{" "}
+        <Link href="/login" className="underline underline-offset-2 hover:text-ink-soft">
+          Sign in
         </Link>
       </p>
     </div>

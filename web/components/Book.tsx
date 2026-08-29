@@ -3,7 +3,9 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { TURN_MS, buildRig, fillFaces, paint, shape, type Rig } from "@/lib/flip";
+import { onBookOpen } from "@/lib/bookOpen";
 import { PAGES } from "@/lib/pages";
+import { warmBook } from "@/lib/preload";
 
 /** Horizontal travel before a swipe counts as a turn rather than a stray drag. */
 const SWIPE_MIN = 60;
@@ -14,6 +16,8 @@ const SWIPE_MIN = 60;
  * its data before it is frozen.
  */
 const CAPTURE_AT = 0.45;
+/** Must match the cover-lift animation in globals.css. */
+const COVER_MS = 1000;
 
 interface Turn {
   dir: 1 | -1;
@@ -129,6 +133,9 @@ export default function Book({ children }: { children: ReactNode }) {
   const beneathRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLDivElement>(null);
   const foldRef = useRef<HTMLDivElement>(null);
+  const coverRef = useRef<HTMLDivElement>(null);
+  const coverFaceRef = useRef<HTMLDivElement>(null);
+  const openingRef = useRef(false);
 
   const [turning, setTurning] = useState(false);
   const [folioOpen, setFolioOpen] = useState(false);
@@ -158,6 +165,48 @@ export default function Book({ children }: { children: ReactNode }) {
     }
     setTurning(false);
   }, []);
+
+  /*
+   * Opening the book.
+   *
+   * Sign-in and sign-up are the cover: on success their own screen is frozen,
+   * lifted on its top edge and swung up and away, and the first page is behind
+   * it. The live page is held until the route commits, the same as a turn, so
+   * what appears under the rising cover is the page rather than a loader.
+   */
+  const openBook = useCallback(() => {
+    const main = mainRef.current;
+    const cover = coverRef.current;
+    const face = coverFaceRef.current;
+    if (!main || !cover || !face) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    place(face, snapshot(main), window.scrollY);
+    cover.hidden = false;
+    main.classList.add("book-hold", "book-ruled");
+    openingRef.current = true;
+
+    // Restart the animation even if a previous open left the class on.
+    cover.classList.remove("is-lifting");
+    void cover.offsetWidth;
+    cover.classList.add("is-lifting");
+
+    window.setTimeout(() => {
+      openingRef.current = false;
+      cover.classList.remove("is-lifting");
+      cover.hidden = true;
+      face.replaceChildren();
+      main.classList.remove("book-hold", "book-ruled");
+    }, COVER_MS);
+  }, []);
+
+  useEffect(() => onBookOpen(openBook), [openBook]);
+
+  // The first page has arrived: let it show through from under the cover.
+  useEffect(() => {
+    if (!openingRef.current) return;
+    mainRef.current?.classList.remove("book-hold");
+  }, [pathname]);
 
   const go = useCallback(
     (to: number) => {
@@ -227,26 +276,35 @@ export default function Book({ children }: { children: ReactNode }) {
         const t = dir === 1 ? shape(p) : 1 - shape(p);
         const f = paint(turn.rig, t, width);
 
-        if (dir === 1) {
-          /*
-           * The live page is revealed to the right of the crease. Clip first,
-           * then unhide, both inside this frame — unhiding it anywhere else
-           * would let one frame through with the new page covering everything.
-           */
-          if (turn.committed) {
-            main.style.clipPath = `inset(0 0 0 ${f}px)`;
-            main.classList.remove("book-hold");
-          }
-        } else {
-          if (!turn.captured && turn.committed && p >= CAPTURE_AT) {
-            const incoming = snapshot(main);
-            place(base, incoming, 0);
-            fillFaces(turn.rig, incoming, 0);
-            base.hidden = false;
-            turn.captured = true;
-          }
-          // The frozen incoming page has landed to the left of the crease.
-          if (turn.captured) base.style.clipPath = `inset(0 ${width - f}px 0 0)`;
+        /*
+         * Freeze the incoming page and animate over the frozen copy, both
+         * directions.
+         *
+         * The live page cannot be the one revealed: it refetches on mount, and
+         * when that lands mid-turn React repaints it *behind the crease that
+         * has already gone past* — content changing in a region the wave has
+         * finished with, which is the tear this exists to stop. Frozen, what
+         * the turn reveals is settled before the first pixel of it is shown.
+         *
+         * Forward captures as soon as the route commits, because the reveal
+         * starts immediately. Back waits until CAPTURE_AT, when the flap is
+         * still showing its blank reverse, which buys the page longer to be
+         * worth photographing.
+         */
+        const readyToCapture = dir === 1 ? turn.committed : turn.committed && p >= CAPTURE_AT;
+        if (!turn.captured && readyToCapture) {
+          const incoming = snapshot(main);
+          place(base, incoming, 0);
+          // Back turns need it on the flap too; forward's flap is the old page.
+          if (dir === -1) fillFaces(turn.rig, incoming, 0);
+          base.hidden = false;
+          turn.captured = true;
+        }
+
+        if (turn.captured) {
+          // Forward reveals to the right of the crease, back lands to the left.
+          base.style.clipPath =
+            dir === 1 ? `inset(0 0 0 ${f}px)` : `inset(0 ${width - f}px 0 0)`;
         }
 
         if (p >= 1) {
@@ -276,6 +334,46 @@ export default function Book({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => finish, [finish]);
+
+  /*
+   * Warm the pages either side of this one.
+   *
+   * A turn pushes a route the client may never have loaded, so the commit can
+   * be waiting on a JS chunk while the sheet is already lifting — the page
+   * arrives late and the animation lands on nothing. Prefetching the immediate
+   * neighbours makes the commit a local one. Only the two adjacent pages, and
+   * only once the current one is idle, so this never competes with the fetch
+   * the page you are actually on is doing.
+   */
+  useEffect(() => {
+    if (!inBook) return;
+    const near = [PAGES[idx - 1], PAGES[idx + 1]].filter(Boolean);
+    const idle =
+      window.requestIdleCallback?.(() => near.forEach((p) => router.prefetch(p.href))) ??
+      window.setTimeout(() => near.forEach((p) => router.prefetch(p.href)), 300);
+    return () => {
+      if (window.cancelIdleCallback) window.cancelIdleCallback(idle as number);
+      else window.clearTimeout(idle as number);
+    };
+  }, [idx, inBook, router]);
+
+  /*
+   * Fill every page's cache once, shortly after arrival. The turn shows a
+   * frozen copy of the incoming page, so this is what decides whether that
+   * copy is the real page or a loader caught mid-spin.
+   */
+  useEffect(() => {
+    if (!inBook) return;
+    const id =
+      window.requestIdleCallback?.(() => void warmBook(pathname)) ??
+      window.setTimeout(() => void warmBook(pathname), 600);
+    return () => {
+      if (window.cancelIdleCallback) window.cancelIdleCallback(id as number);
+      else window.clearTimeout(id as number);
+    };
+    // Once per mount: warmBook guards itself against running twice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inBook]);
 
   /* Mobile: swipe. Left turns forward, the way a book does. */
   useEffect(() => {
@@ -358,6 +456,15 @@ export default function Book({ children }: { children: ReactNode }) {
       </div>
 
       <div ref={foldRef} className="book-fold" aria-hidden="true" hidden />
+
+      {/* The cover. Only ever used on the way in from sign-in or sign-up. */}
+      <div ref={coverRef} className="book-cover-stage" aria-hidden="true" hidden>
+        <div className="book-cover">
+          <div ref={coverFaceRef} className="book-cover-face book-ruled" />
+          <div className="book-cover-back book-ruled" />
+          <div className="book-cover-shade" />
+        </div>
+      </div>
 
       {inBook && (
         <>
