@@ -1,4 +1,17 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+/*
+ * Same-origin in the browser, always. The API lives behind the /api rewrite in
+ * next.config.ts so the session cookie is first-party — Safari drops it
+ * otherwise, and the app looks like it signs you out the instant you sign in.
+ *
+ * Server-side rendering has no origin to be relative to, so it keeps the
+ * absolute address. Nothing currently fetches during SSR; this is here so that
+ * the day something does, it fails loudly rather than resolving against the
+ * wrong host.
+ */
+const BASE =
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+    : "/api";
 
 export class ApiError extends Error {
   constructor(

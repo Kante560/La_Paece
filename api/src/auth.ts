@@ -26,18 +26,21 @@ declare global {
 }
 
 /*
- * In production the web app and this API sit on different domains (Vercel and
- * Railway), which makes every API call a cross-site request. A SameSite=Lax
- * cookie is simply not sent on those: the browser accepts it at login and then
- * withholds it on everything after, so the very next call 401s and the client
- * bounces you back to /login. It reads as "logging in logs me out". None is the
- * only value that survives the trip, and browsers only honour None together
- * with Secure — hence the pair moving as one.
+ * The web app proxies this API under its own /api path (see next.config.ts), so
+ * the browser only ever talks to one origin and this cookie is first-party.
  *
- * Locally both sides are localhost, so Lax is correct and Secure would break
- * plain http. env.ts warns if NODE_ENV leaves this on the wrong branch.
+ * It used to be issued SameSite=None; Secure, because the browser called the
+ * API on its own domain and Lax would not survive that trip. That worked in
+ * Chrome and failed completely in Safari, which has blocked third-party
+ * cookies since 13.1: SameSite=None is an explicit statement that a cookie is
+ * cross-site, and Safari's answer to that is to drop it. Signing in appeared to
+ * succeed and every request after it was anonymous.
+ *
+ * Lax is now correct and is the stricter choice: the cookie rides same-origin
+ * XHR, and no longer travels on cross-site requests at all. Secure still tracks
+ * NODE_ENV, because it cannot be set on plain http in local development.
  */
-const CROSS_SITE = process.env.NODE_ENV === "production";
+const SECURE = process.env.NODE_ENV === "production";
 
 /*
  * Shared by issue and clear on purpose. A cookie is only cleared when the
@@ -46,8 +49,8 @@ const CROSS_SITE = process.env.NODE_ENV === "production";
  */
 const cookieOptions: CookieOptions = {
   httpOnly: true,
-  sameSite: CROSS_SITE ? "none" : "lax",
-  secure: CROSS_SITE,
+  sameSite: "lax",
+  secure: SECURE,
   path: "/",
 };
 

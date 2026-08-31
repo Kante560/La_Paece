@@ -38,18 +38,20 @@ if (!process.env.DATABASE_URL) {
 }
 
 /*
- * The session cookie's SameSite/Secure pair is chosen off NODE_ENV (see
- * auth.ts). Railway does not reliably set it, and getting it wrong is invisible
- * at boot: the API answers every request happily while the browser quietly
- * refuses to store or return the cookie. An https WEB_ORIGIN means we are
- * deployed, so a non-production NODE_ENV there is almost certainly a mistake.
+ * The session cookie is Secure whenever NODE_ENV is production (see auth.ts).
+ * Railway does not reliably set it, and getting it wrong is invisible at boot:
+ * the API answers every request happily while the browser quietly refuses to
+ * store the cookie. An https WEB_ORIGIN means we are deployed, so a
+ * non-production NODE_ENV there is almost certainly a mistake.
  */
 if (process.env.WEB_ORIGIN?.startsWith("https://") && process.env.NODE_ENV !== "production") {
   console.warn(
-    "[api] WEB_ORIGIN is https but NODE_ENV is not 'production'. The session\n" +
-      "      cookie is then issued SameSite=Lax without Secure, which the browser\n" +
-      "      will not send back cross-site — every login will look like an\n" +
-      "      instant logout. Set NODE_ENV=production on the host.",
+    [
+      "[api] WEB_ORIGIN is https but NODE_ENV is not 'production'. The session",
+      "      cookie is then issued without Secure, which a browser on an https",
+      "      page will refuse to store — every login will look like an instant",
+      "      logout. Set NODE_ENV=production on the host.",
+    ].join("\n"),
   );
 }
 

@@ -17,13 +17,31 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 const MINUTE = 60 * 1000;
 
-/** Both halves of a login attempt, so one attacker can't lock out a whole office. */
-function ipAndEmail(req: { ip?: string; body?: unknown }): string {
-  const body = req.body as { email?: unknown } | undefined;
-  const email = typeof body?.email === "string" ? body.email.toLowerCase().trim() : "";
-  // ipKeyGenerator normalises IPv6 to a /56 block; a bare req.ip would let
-  // anyone with a v6 allocation walk the limiter one address at a time.
-  return `${ipKeyGenerator(req.ip ?? "")}:${email}`;
+/**
+ * The caller's own address, not the proxy's.
+ *
+ * The browser reaches this API through the web app's /api rewrite, so every
+ * request now arrives from the same handful of platform addresses. Keyed on
+ * that, three signups an hour would be three signups an hour *for everybody* —
+ * the limiter would lock the product, not an abuser. The forwarded chain is
+ * what still distinguishes one caller from another; its leftmost entry is the
+ * original client by convention, with x-real-ip as the fallback.
+ *
+ * This trusts a header, which is only worth anything while the proxy is the
+ * way in: someone who reaches the API host directly can put whatever they like
+ * in it. Restricting the API host to the proxy is what would close that, and
+ * that is infrastructure, not code.
+ */
+function clientIp(req: { ip?: string; headers: Record<string, unknown> }): string {
+  const header = (name: string): string | undefined => {
+    const v = req.headers[name];
+    return typeof v === "string" && v.length > 0 ? v : undefined;
+  };
+  const forwarded = header("x-forwarded-for")?.split(",")[0]?.trim();
+  const candidate = forwarded || header("x-real-ip") || req.ip || "";
+  // Normalises IPv6 to a /56 block; a bare address would let anyone with a v6
+  // allocation walk the limiter one address at a time.
+  return ipKeyGenerator(candidate);
 }
 
 /**
@@ -36,7 +54,12 @@ function ipAndEmail(req: { ip?: string; body?: unknown }): string {
 export const loginLimiter = rateLimit({
   windowMs: 15 * MINUTE,
   limit: 3,
-  keyGenerator: ipAndEmail,
+  // Both halves, so one attacker can't lock a whole office out of their accounts.
+  keyGenerator: (req) => `${clientIp(req)}:${
+    typeof (req.body as { email?: unknown } | undefined)?.email === "string"
+      ? ((req.body as { email: string }).email).toLowerCase().trim()
+      : ""
+  }`,
   // The whole point: only wrong answers are counted.
   skipSuccessfulRequests: true,
   standardHeaders: "draft-7",
@@ -56,6 +79,7 @@ export const loginLimiter = rateLimit({
 export const signupLimiter = rateLimit({
   windowMs: 60 * MINUTE,
   limit: 3,
+  keyGenerator: clientIp,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: {

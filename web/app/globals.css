@@ -326,6 +326,7 @@ input[type="number"]::-webkit-inner-spin-button {
 .book-facet {
   position: absolute;
   inset: 0;
+  -webkit-transform-style: preserve-3d;
   transform-style: preserve-3d;
   transform-origin: 0 50%;
 }
@@ -336,6 +337,7 @@ input[type="number"]::-webkit-inner-spin-button {
 .book-back {
   position: absolute;
   inset: 0;
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 .book-back {
@@ -570,6 +572,7 @@ input[type="number"]::-webkit-inner-spin-button {
   position: absolute;
   inset: 0;
   transform-origin: center top;
+  -webkit-transform-style: preserve-3d;
   transform-style: preserve-3d;
 }
 .book-cover-stage.is-lifting .book-cover {
@@ -580,6 +583,7 @@ input[type="number"]::-webkit-inner-spin-button {
 .book-cover-back {
   position: absolute;
   inset: 0;
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 /* The underside of the cover — blank board, no print on it. */
